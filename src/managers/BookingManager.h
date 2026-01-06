@@ -2,6 +2,7 @@
 #define BOOKINGMANAGER_H
 
 #include "../CLI/Colors.h"
+#include "../ds/HashTable.h"
 #include "../ds/PriorityQueue.h"
 #include "../ds/Queue.h"
 #include "../models/Booking.h"
@@ -20,6 +21,7 @@ private:
   vector<Passenger> *passengersRef;
   Queue waitlistQueue;
   PriorityQueue boardingQueue;
+  HashTable<Booking> bookingHash;
 
   // generates a unique booking id
   string generateBookingID() {
@@ -64,6 +66,14 @@ private:
     return nullptr;
   }
 
+  // builds hash table from existing bookings
+  void buildBookingHash() {
+    for (int i = 0; i < bookingsRef->size(); i++) {
+      Booking* b = &(*bookingsRef)[i];
+      bookingHash.insert(b->getBookingID(), b);
+    }
+  }
+
 public:
   // constructor for booking manager
   BookingManager(vector<Booking> *bookings, vector<Flight> *flights,
@@ -71,6 +81,7 @@ public:
     bookingsRef = bookings;
     flightsRef = flights;
     passengersRef = passengers;
+    buildBookingHash();
   }
 
   // handles the flight booking process for a passenger
@@ -107,6 +118,11 @@ public:
       Booking newBooking(bookingID, passengerID, flightID, "WAITLIST",
                          "WAITLIST");
       bookingsRef->push_back(newBooking);
+      
+      // ADD TO HASH TABLE
+      Booking* b = &bookingsRef->back();
+      bookingHash.insert(bookingID, b);
+      
       cout << Colors::BOLD << Colors::BRIGHT_YELLOW
            << "\n[!] FLIGHT IS FULL! ADDED TO WAITLIST." << Colors::RESET
            << endl;
@@ -117,6 +133,10 @@ public:
       Booking newBooking(bookingID, passengerID, flightID, seatNumber,
                          "CONFIRMED");
       bookingsRef->push_back(newBooking);
+      
+      // ADD TO HASH TABLE
+      Booking* b = &bookingsRef->back();
+      bookingHash.insert(bookingID, b);
 
       flight->setBookedSeats(flight->getBookedSeats() + 1);
 
@@ -141,26 +161,17 @@ public:
     }
   }
 
-  // cancels a booking for a passenger
+  // cancels a booking for a passenger using hash table for fast lookup
   void cancelBooking(string passengerID) {
     string bookingID;
     cin.ignore();
     cout << Colors::BOLD << "\nENTER BOOKING ID TO CANCEL: " << Colors::RESET;
     getline(cin, bookingID);
 
-    Booking *booking = nullptr;
-    int bookingIndex = -1;
+    // USE HASH TABLE for O(1) lookup
+    Booking *booking = bookingHash.search(bookingID);
 
-    for (int i = 0; i < bookingsRef->size(); i++) {
-      if ((*bookingsRef)[i].getBookingID() == bookingID &&
-          (*bookingsRef)[i].getPassengerID() == passengerID) {
-        booking = &(*bookingsRef)[i];
-        bookingIndex = i;
-        break;
-      }
-    }
-
-    if (booking == nullptr) {
+    if (booking == nullptr || booking->getPassengerID() != passengerID) {
       cout << Colors::BOLD << Colors::BRIGHT_RED << "[-] BOOKING NOT FOUND!"
            << Colors::RESET << endl;
       return;
@@ -173,10 +184,11 @@ public:
     }
 
     string flightID = booking->getFlightID();
+    string oldStatus = booking->getBookingStatus();
     booking->setBookingStatus("CANCELLED");
 
     Flight *flight = findFlight(flightID);
-    if (flight != nullptr && booking->getBookingStatus() != "WAITLIST") {
+    if (flight != nullptr && oldStatus != "WAITLIST") {
       flight->setBookedSeats(flight->getBookedSeats() - 1);
 
       // update flight in vector

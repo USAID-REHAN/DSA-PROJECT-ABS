@@ -2,6 +2,7 @@
 #define AUTHMANAGER_H
 
 #include "../CLI/Colors.h"
+#include "../ds/HashTable.h"  // ADD THIS
 #include "../models/Passenger.h"
 #include "FileManager.h"
 #include <iostream>
@@ -13,8 +14,9 @@ using namespace std;
 class AuthManager {
 private:
   vector<Passenger> *passengersRef;
+  HashTable<Passenger> passengerHashByID;    // ADD THIS
+  HashTable<Passenger> passengerHashByEmail; // ADD THIS
 
-  // generates a unique passenger id
   string generatePassengerID() {
     int maxID = 0;
     for (int i = 0; i < passengersRef->size(); i++) {
@@ -30,39 +32,55 @@ private:
     return "P" + to_string(maxID);
   }
 
-public:
-  // constructor for auth manager
-  AuthManager(vector<Passenger> *passengers) { passengersRef = passengers; }
-
-  // handles passenger login
-  Passenger *loginPassenger(string email, string password) {
+  // ADD THIS - Build hash tables from existing data
+  void buildHashTables() {
     for (int i = 0; i < passengersRef->size(); i++) {
-      if ((*passengersRef)[i].getEmail() == email &&
-          (*passengersRef)[i].getPassword() == password) {
-        return &(*passengersRef)[i];
-      }
+      Passenger* p = &(*passengersRef)[i];
+      passengerHashByID.insert(p->getPassengerID(), p);
+      passengerHashByEmail.insert(p->getEmail(), p);
+    }
+  }
+
+public:
+  AuthManager(vector<Passenger> *passengers) { 
+    passengersRef = passengers;
+    buildHashTables();  // ADD THIS
+  }
+
+  // MODIFY THIS - Use hash table for faster lookup
+  Passenger *loginPassenger(string email, string password) {
+    Passenger* p = passengerHashByEmail.search(email);  // HASH TABLE LOOKUP
+    if (p != nullptr && p->getPassword() == password) {
+      return p;
     }
     return nullptr;
   }
 
-  // handles passenger signup
   bool signupPassenger(string name, string email, string password, string phone,
                        string type) {
 
-    // CHECK IF EMAIL ALREADY EXISTS
-    for (int i = 0; i < passengersRef->size(); i++) {
-      if ((*passengersRef)[i].getEmail() == email) {
-        return false;
-      }
+    // CHECK IF EMAIL ALREADY EXISTS - Using Hash Table
+    if (passengerHashByEmail.search(email) != nullptr) {  // HASH TABLE LOOKUP
+      return false;
     }
 
     string newID = generatePassengerID();
     Passenger newPassenger(newID, name, email, password, phone, type);
     passengersRef->push_back(newPassenger);
+    
+    // ADD TO HASH TABLES
+    Passenger* p = &passengersRef->back();
+    passengerHashByID.insert(newID, p);
+    passengerHashByEmail.insert(email, p);
+    
     return true;
   }
 
-  // handles admin login
+  // ADD THIS - Fast passenger lookup by ID
+  Passenger* findPassengerByID(string passengerID) {
+    return passengerHashByID.search(passengerID);
+  }
+
   bool loginAdmin(string filename, string username, string password) {
     return FileManager::verifyAdmin(filename, username, password);
   }

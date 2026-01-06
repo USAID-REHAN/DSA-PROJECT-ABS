@@ -3,6 +3,7 @@
 
 #include "../CLI/Colors.h"
 #include "../ds/BST.h"
+#include "../ds/HashTable.h"
 #include "../ds/LinkedList.h"
 #include "../ds/Stack.h"
 #include "../models/Aircraft.h"
@@ -20,6 +21,8 @@ private:
   BST flightBST;
   Stack undoStack;
   LinkedList activityLog;
+  HashTable<Flight> flightHash;
+  HashTable<Aircraft> aircraftHash;
 
   // generates a unique flight id
   string generateFlightID() {
@@ -55,11 +58,25 @@ private:
     return "[TIME]"; // SIMPLIFIED - IN REAL APP, USE <ctime>
   }
 
+  // builds hash tables from existing data
+  void buildHashTables() {
+    for (int i = 0; i < flightsRef->size(); i++) {
+      Flight* f = &(*flightsRef)[i];
+      flightHash.insert(f->getFlightID(), f);
+    }
+    for (int i = 0; i < aircraftsRef->size(); i++) {
+      Aircraft* a = &(*aircraftsRef)[i];
+      aircraftHash.insert(a->getAircraftID(), a);
+    }
+  }
+
 public:
   // constructor for flight manager
   FlightManager(vector<Flight> *flights, vector<Aircraft> *aircrafts) {
     flightsRef = flights;
     aircraftsRef = aircrafts;
+    
+    buildHashTables();
 
     // BUILD BST FROM EXISTING FLIGHTS
     for (int i = 0; i < flightsRef->size(); i++) {
@@ -89,20 +106,14 @@ public:
     cout << Colors::BOLD << "ENTER AIRCRAFT ID: " << Colors::RESET;
     getline(cin, aircraftID);
 
-    // FIND AIRCRAFT CAPACITY
-    capacity = 0;
-    for (int i = 0; i < aircraftsRef->size(); i++) {
-      if ((*aircraftsRef)[i].getAircraftID() == aircraftID) {
-        capacity = (*aircraftsRef)[i].getCapacity();
-        break;
-      }
-    }
-
-    if (capacity == 0) {
+    // FIND AIRCRAFT CAPACITY using Hash Table
+    Aircraft* aircraft = aircraftHash.search(aircraftID);
+    if (aircraft == nullptr) {
       cout << Colors::BOLD << Colors::BRIGHT_RED << "[-] INVALID AIRCRAFT ID!"
            << Colors::RESET << endl;
       return;
     }
+    capacity = aircraft->getCapacity();
 
     cout << Colors::BOLD << "ENTER ORIGIN (AIRPORT CODE): " << Colors::RESET;
     getline(cin, origin);
@@ -135,6 +146,10 @@ public:
     undoStack.push(undoFlight);
 
     flightsRef->push_back(newFlight);
+    
+    // ADD TO HASH TABLE AND BST
+    Flight* f = &flightsRef->back();
+    flightHash.insert(newID, f);
     flightBST.insert(newFlight);
 
     activityLog.insertEnd("Added Flight: " + newID, getCurrentTimestamp());
@@ -151,7 +166,8 @@ public:
     cout << Colors::BOLD << "\nENTER FLIGHT ID TO UPDATE: " << Colors::RESET;
     getline(cin, flightID);
 
-    Flight *flight = flightBST.search(flightID);
+    // Use hash table for fast lookup
+    Flight *flight = flightHash.search(flightID);
     if (flight == nullptr) {
       cout << Colors::BOLD << Colors::BRIGHT_RED << "[-] FLIGHT NOT FOUND!"
            << Colors::RESET << endl;
@@ -227,7 +243,7 @@ public:
     cout << Colors::BOLD << "\nENTER FLIGHT ID TO DELETE: " << Colors::RESET;
     getline(cin, flightID);
 
-    Flight *flight = flightBST.search(flightID);
+    Flight *flight = flightHash.search(flightID);
     if (flight == nullptr) {
       cout << Colors::BOLD << Colors::BRIGHT_RED << "[-] FLIGHT NOT FOUND!"
            << Colors::RESET << endl;
@@ -245,7 +261,8 @@ public:
       }
     }
 
-    // DELETE FROM BST
+    // DELETE FROM HASH TABLE AND BST
+    flightHash.remove(flightID);
     flightBST.remove(flightID);
 
     activityLog.insertEnd("Deleted Flight: " + flightID, getCurrentTimestamp());
@@ -340,7 +357,8 @@ public:
     cout << Colors::BOLD << "\nENTER FLIGHT ID: " << Colors::RESET;
     getline(cin, flightID);
 
-    Flight *flight = flightBST.search(flightID);
+    // Use hash table for fast lookup
+    Flight *flight = flightHash.search(flightID);
     if (flight == nullptr) {
       cout << Colors::BOLD << Colors::BRIGHT_RED << "[-] FLIGHT NOT FOUND!"
            << Colors::RESET << endl;
@@ -372,7 +390,8 @@ public:
     cout << Colors::BOLD << "\nENTER FLIGHT ID: " << Colors::RESET;
     getline(cin, flightID);
 
-    Flight *flight = flightBST.search(flightID);
+    // Use hash table for fast lookup
+    Flight *flight = flightHash.search(flightID);
     if (flight == nullptr) {
       cout << Colors::BOLD << Colors::BRIGHT_RED << "[-] FLIGHT NOT FOUND!"
            << Colors::RESET << endl;
@@ -422,6 +441,8 @@ public:
           break;
         }
       }
+      // REMOVE FROM HASH TABLE AND BST
+      flightHash.remove(flightID);
       flightBST.remove(flightID);
       cout << Colors::BOLD << Colors::BRIGHT_GREEN
            << "\n[+] UNDO: REMOVED ADDED FLIGHT " << flightID << Colors::RESET
@@ -441,6 +462,9 @@ public:
       }
       if (!found) {
         flightsRef->push_back(lastFlight);
+        // ADD TO HASH TABLE
+        Flight* f = &flightsRef->back();
+        flightHash.insert(flightID, f);
       }
       // UPDATE BST (REMOVE OLD AND RE-INSERT TO RE-BALANCE OR OVERWRITE)
       flightBST.remove(flightID);
